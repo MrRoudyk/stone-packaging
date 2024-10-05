@@ -20,6 +20,7 @@ jobs:
           else
             echo "TARGET_ARCH=x86_64" >> $GITHUB_ENV
           fi
+          echo "TARGET_ARCH: $TARGET_ARCH"
 
       - name: Set Version
         run: |
@@ -27,6 +28,8 @@ jobs:
           VERSION_NO_V=${VERSION#v}
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "VERSION_NO_V=$VERSION_NO_V" >> $GITHUB_ENV
+          echo "VERSION: $VERSION"
+          echo "VERSION_NO_V: $VERSION_NO_V"
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -52,13 +55,20 @@ jobs:
         run: |
           echo "Listing files in current directory:"
           ls -la ./
-          echo "Listing files in tmp/stone-prover/build/bazelbin/src/starkware/main/cpu/:"
+          echo "Listing files in /tmp/stone-prover/build/bazelbin/src/starkware/main/cpu/:"
           ls -la /tmp/stone-prover/build/bazelbin/src/starkware/main/cpu/
 
       - name: Copy and rename binaries for Homebrew
         run: |
           cp /tmp/stone-prover/build/bazelbin/src/starkware/main/cpu/cpu_air_prover ./cpu_air_prover-${{ env.TARGET_ARCH }}
           cp /tmp/stone-prover/build/bazelbin/src/starkware/main/cpu/cpu_air_verifier ./cpu_air_verifier-${{ env.TARGET_ARCH }}
+          echo "Copied and renamed binaries."
+
+      - name: Make binaries executable
+        run: |
+          chmod +x cpu_air_prover-${{ env.TARGET_ARCH }}
+          chmod +x cpu_air_verifier-${{ env.TARGET_ARCH }}
+          echo "Set executable permissions."
 
       - name: Verify binaries
         run: |
@@ -69,12 +79,14 @@ jobs:
       - name: Package binaries
         run: |
           tar -czvf stone-prover-${{ env.VERSION_NO_V }}-macos-${{ env.TARGET_ARCH }}.tar.gz cpu_air_prover-${{ env.TARGET_ARCH }} cpu_air_verifier-${{ env.TARGET_ARCH }}
+          echo "Packaged binaries into stone-prover-${{ env.VERSION_NO_V }}-macos-${{ env.TARGET_ARCH }}.tar.gz"
 
       - name: Compute SHA256
         id: compute_sha
         run: |
           SHA256=$(shasum -a 256 stone-prover-${{ env.VERSION_NO_V }}-macos-${{ env.TARGET_ARCH }}.tar.gz | awk '{ print $1 }')
           echo "sha256=${SHA256}" >> $GITHUB_OUTPUT
+          echo "Computed SHA256: $SHA256"
 
       - name: Create GitHub Release and Upload Asset
         uses: softprops/action-gh-release@v2
@@ -95,6 +107,7 @@ jobs:
         run: |
           sed -i '' "s|url \".*\"|url \"https://github.com/MrRoudyk/stone-packaging/releases/download/v${{ env.VERSION_NO_V }}/stone-prover-${{ env.VERSION_NO_V }}-macos-${{ env.TARGET_ARCH }}.tar.gz\"|" Formula/stone-prover.rb
           sed -i '' "s|sha256 \".*\"|sha256 \"${{ steps.compute_sha.outputs.sha256 }}\"|" Formula/stone-prover.rb
+          sed -i '' "s|version \".*\"|version \"${{ env.VERSION_NO_V }}\"|" Formula/stone-prover.rb
 
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
