@@ -61,23 +61,28 @@ jobs:
         id: compute_sha
         run: |
           SHA256=$(shasum -a 256 stone-prover-${VERSION_NO_V}-macos-${TARGET_ARCH}.tar.gz | awk '{ print $1 }')
-          echo "sha256=$SHA256" >> $GITHUB_OUTPUT
+          echo "sha256=${SHA256}" >> $GITHUB_OUTPUT
 
       - name: Create GitHub Release and Upload Asset
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: stone-prover-${VERSION_NO_V}-macos-${TARGET_ARCH}.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Checkout Homebrew Formula Repository
+        uses: actions/checkout@v3
+        with:
+          repository: MrRoudyk/homebrew-stone-prover
+          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          path: homebrew-stone-prover
 
       - name: Update Homebrew Formula
         env:
           SHA256: ${{ steps.compute_sha.outputs.sha256 }}
           VERSION_NO_V: ${{ env.VERSION_NO_V }}
           TARGET_ARCH: ${{ env.TARGET_ARCH }}
-          GITHUB_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
         run: |
-          git clone https://github.com/MrRoudyk/homebrew-stone-prover.git
           cd homebrew-stone-prover
 
           sed -i '' "s|url \".*\"|url \"https://github.com/MrRoudyk/stone-packaging/releases/download/v${VERSION_NO_V}/stone-prover-${VERSION_NO_V}-macos-${TARGET_ARCH}.tar.gz\"|" Formula/stone-prover.rb
