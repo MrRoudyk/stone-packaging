@@ -75,7 +75,7 @@ jobs:
           SHA256: ${{ steps.compute_sha.outputs.sha256 }}
           VERSION_NO_V: ${{ env.VERSION_NO_V }}
           TARGET_ARCH: ${{ env.TARGET_ARCH }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
         run: |
           git clone https://github.com/MrRoudyk/homebrew-stone-prover.git
           cd homebrew-stone-prover
