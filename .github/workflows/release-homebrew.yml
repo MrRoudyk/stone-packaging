@@ -1,0 +1,77 @@
+name: Release Homebrew Package
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: |
+          brew install gmp bazelisk
+          pip3 install cpplint pytest numpy sympy==1.12.1 cairo-lang==0.12.0
+
+      - name: Clone stone-prover
+        run: git clone https://github.com/baking-bad/stone-prover.git /tmp/stone-prover
+
+      - name: Build stone-prover
+        working-directory: /tmp/stone-prover
+        run: |
+          bazelisk build //...
+          tar -czvf stone-prover-${GITHUB_REF#refs/tags/v}.tar.gz .
+
+      - name: Compute SHA256
+        id: compute_sha
+        run: |
+          SHA256=$(shasum -a 256 /tmp/stone-prover/stone-prover-${GITHUB_REF#refs/tags/v}.tar.gz | awk '{ print $1 }')
+          echo "sha256=${SHA256}" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
+          draft: false
+          prerelease: false
+
+      - name: Upload release asset
+        uses: actions/upload-release-asset@v1
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: /tmp/stone-prover/stone-prover-${GITHUB_REF#refs/tags/v}.tar.gz
+          asset_name: stone-prover-${GITHUB_REF#refs/tags/v}.tar.gz
+          asset_content_type: application/gzip
+
+      - name: Update Homebrew Formula
+        env:
+          SHA256: ${{ steps.compute_sha.outputs.sha256 }}
+          VERSION: ${{ github.ref_name }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git clone https://github.com/MrRoudyk/homebrew-stone-prover.git
+          cd homebrew-stone-prover
+
+          sed -i '' "s|url \".*\"|url \"https://github.com/MrRoudyk/stone-packaging/releases/download/v${VERSION}/stone-prover-${VERSION}.tar.gz\"|" Formula/stone-prover.rb
+          sed -i '' "s|sha256 \".*\"|sha256 \"${SHA256}\"|" Formula/stone-prover.rb
+
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+
+          git add Formula/stone-prover.rb
+          git commit -m "Update Stone Prover to version ${VERSION}" || echo "No changes to commit"
+          git push origin main
