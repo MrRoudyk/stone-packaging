@@ -50,23 +50,23 @@ jobs:
 
       - name: Rename binaries for Homebrew
         run: |
-          mv /usr/local/bin/cpu_air_prover ./cpu_air_prover-${TARGET_ARCH}
-          mv /usr/local/bin/cpu_air_verifier ./cpu_air_verifier-${TARGET_ARCH}
+          mv /usr/local/bin/cpu_air_prover ./cpu_air_prover-${{ env.TARGET_ARCH }}
+          mv /usr/local/bin/cpu_air_verifier ./cpu_air_verifier-${{ env.TARGET_ARCH }}
 
       - name: Package binaries
         run: |
-          tar -czvf stone-prover-${VERSION_NO_V}-macos-${TARGET_ARCH}.tar.gz cpu_air_prover-${TARGET_ARCH} cpu_air_verifier-${TARGET_ARCH}
+          tar -czvf stone-prover-${{ env.VERSION_NO_V }}-macos-${{ env.TARGET_ARCH }}.tar.gz cpu_air_prover-${{ env.TARGET_ARCH }} cpu_air_verifier-${{ env.TARGET_ARCH }}
 
       - name: Compute SHA256
         id: compute_sha
         run: |
-          SHA256=$(shasum -a 256 stone-prover-${VERSION_NO_V}-macos-${TARGET_ARCH}.tar.gz | awk '{ print $1 }')
+          SHA256=$(shasum -a 256 stone-prover-${{ env.VERSION_NO_V }}-macos-${{ env.TARGET_ARCH }}.tar.gz | awk '{ print $1 }')
           echo "sha256=${SHA256}" >> $GITHUB_OUTPUT
 
       - name: Create GitHub Release and Upload Asset
         uses: softprops/action-gh-release@v2
         with:
-          files: stone-prover-${VERSION_NO_V}-macos-${TARGET_ARCH}.tar.gz
+          files: stone-prover-${{ env.VERSION_NO_V }}-macos-${{ env.TARGET_ARCH }}.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -78,19 +78,14 @@ jobs:
           path: homebrew-stone-prover
 
       - name: Update Homebrew Formula
-        env:
-          SHA256: ${{ steps.compute_sha.outputs.sha256 }}
-          VERSION_NO_V: ${{ env.VERSION_NO_V }}
-          TARGET_ARCH: ${{ env.TARGET_ARCH }}
+        working-directory: homebrew-stone-prover
         run: |
-          cd homebrew-stone-prover
-
-          sed -i '' "s|url \".*\"|url \"https://github.com/MrRoudyk/stone-packaging/releases/download/v${VERSION_NO_V}/stone-prover-${VERSION_NO_V}-macos-${TARGET_ARCH}.tar.gz\"|" Formula/stone-prover.rb
-          sed -i '' "s|sha256 \".*\"|sha256 \"${SHA256}\"|" Formula/stone-prover.rb
+          sed -i '' "s|url \".*\"|url \"https://github.com/MrRoudyk/stone-packaging/releases/download/v${{ env.VERSION_NO_V }}/stone-prover-${{ env.VERSION_NO_V }}-macos-${{ env.TARGET_ARCH }}.tar.gz\"|" Formula/stone-prover.rb
+          sed -i '' "s|sha256 \".*\"|sha256 \"${{ steps.compute_sha.outputs.sha256 }}\"|" Formula/stone-prover.rb
 
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
 
           git add Formula/stone-prover.rb
-          git commit -m "Update Stone Prover to version ${VERSION_NO_V}" || echo "No changes to commit"
+          git commit -m "Update Stone Prover to version ${{ env.VERSION_NO_V }}" || echo "No changes to commit"
           git push origin main
