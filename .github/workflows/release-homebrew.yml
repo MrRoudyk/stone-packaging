@@ -7,11 +7,11 @@ on:
 
 jobs:
   build:
+    runs-on: macos-14
     strategy:
       fail-fast: false
       matrix:
         arch: [x86_64, arm64]
-    runs-on: macos-latest
     name: Build on ${{ matrix.arch }}
 
     steps:
@@ -72,23 +72,27 @@ jobs:
 
       - name: Package binaries
         run: |
-          tar -czvf stone-prover-${{ env.VERSION_NO_V }}-macos-${{ env.TARGET_ARCH }}.tar.gz cpu_air_prover-${{ env.TARGET_ARCH }} cpu_air_verifier-${{ env.TARGET_ARCH }}
-          echo "Packaged binaries into stone-prover-${{ env.VERSION_NO_V }}-macos-${{ env.TARGET_ARCH }}.tar.gz"
+          tar -czvf stone-prover-macos-${{ env.TARGET_ARCH }}.tar.gz cpu_air_prover-${{ env.TARGET_ARCH }} cpu_air_verifier-${{ env.TARGET_ARCH }}
+          echo "Packaged binaries into stone-prover-macos-${{ env.TARGET_ARCH }}.tar.gz"
 
       - name: Compute SHA256
         id: compute_sha
         run: |
-          SHA256=$(shasum -a 256 stone-prover-${{ env.VERSION_NO_V }}-macos-${{ env.TARGET_ARCH }}.tar.gz | awk '{ print $1 }')
-          echo "sha256=${SHA256}" >> $GITHUB_OUTPUT
-          echo "Computed SHA256: $SHA256"
+          SHA256=$(shasum -a 256 stone-prover-macos-${{ env.TARGET_ARCH }}.tar.gz | awk '{ print $1 }')
+          echo "sha256_${{ env.TARGET_ARCH }}=${SHA256}" >> $GITHUB_ENV
+          echo "::set-output name=sha256_${{ env.TARGET_ARCH }}::$SHA256"
 
       - name: Create GitHub Release and Upload Asset
         uses: softprops/action-gh-release@v2
         with:
-          files: stone-prover-${{ env.VERSION_NO_V }}-macos-${{ env.TARGET_ARCH }}.tar.gz
+          files: stone-prover-macos-${{ env.TARGET_ARCH }}.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  update_formula:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
       - name: Checkout Homebrew Formula Repository
         uses: actions/checkout@v3
         with:
@@ -96,25 +100,29 @@ jobs:
           token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
           path: homebrew-stone-prover
 
-      - name: Update Homebrew Formula
-        working-directory: homebrew-stone-prover
+      - name: Set up Git
         run: |
-          ARCH_SUFFIX=${{ env.TARGET_ARCH }}
-          VERSION="${{ env.VERSION_NO_V }}"
-          URL="https://github.com/MrRoudyk/stone-packaging/releases/download/v${VERSION}/stone-prover-${VERSION}-macos-${ARCH_SUFFIX}.tar.gz"
-          SHA256="${{ steps.compute_sha.outputs.sha256 }}"
-
-          sed -i '' "/^  bottle do$/,/^  end$/d" Formula/stone-prover.rb
-          echo "  bottle do" >> Formula/stone-prover.rb
-          echo "    root_url \"$URL\"" >> Formula/stone-prover.rb
-          echo "    sha256 cellar: :any_skip_relocation, ${ARCH_SUFFIX}: \"$SHA256\"" >> Formula/stone-prover.rb
-          echo "  end" >> Formula/stone-prover.rb
-
-          sed -i '' "s|version \".*\"|version \"$VERSION\"|" Formula/stone-prover.rb
-
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
 
+      - name: Update Homebrew Formula
+        working-directory: homebrew-stone-prover
+        run: |
+          VERSION="${{ env.VERSION_NO_V }}"
+          ROOT_URL="https://github.com/MrRoudyk/stone-packaging/releases/download/v${VERSION}"
+          
+          SHA256_x86_64="${{ env.sha256_x86_64 }}"
+          SHA256_arm64="${{ env.sha256_arm64 }}"
+
+          sed -i '' "/^          bottle do$/,/^          end$/c\\
+          bottle do\\
+            root_url \"${ROOT_URL}\"\\
+            sha256 cellar: :any_skip_relocation, monterey: \"${SHA256_x86_64}\"\\
+            sha256 cellar: :any_skip_relocation, arm64_monterey: \"${SHA256_arm64}\"\\
+          end" Formula/stone-prover.rb
+
+          sed -i '' "s|version \".*\"|version \"${VERSION}\"|" Formula/stone-prover.rb
+
           git add Formula/stone-prover.rb
-          git commit -m "Update Stone Prover to version $VERSION for $ARCH_SUFFIX" || echo "No changes to commit"
+          git commit -m "Update Stone Prover to version ${VERSION} for arm64 and x86_64" || echo "No changes to commit"
           git push origin main
