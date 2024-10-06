@@ -24,13 +24,10 @@ jobs:
           echo "TARGET_ARCH: $TARGET_ARCH"
 
       - name: Set Version
+        id: set_version
         run: |
-          VERSION=${GITHUB_REF##refs/tags/}
-          VERSION_NO_V=${VERSION#v}
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
-          echo "VERSION_NO_V=$VERSION_NO_V" >> $GITHUB_ENV
-          echo "VERSION: $VERSION"
-          echo "VERSION_NO_V: $VERSION_NO_V"
+          VERSION=${GITHUB_REF##refs/tags/v}
+          echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -79,9 +76,15 @@ jobs:
         id: compute_sha
         run: |
           SHA256=$(shasum -a 256 stone-prover-macos-${{ env.TARGET_ARCH }}.tar.gz | awk '{ print $1 }')
-          echo "sha256_${{ env.TARGET_ARCH }}=${SHA256}" >> $GITHUB_ENV
+          echo "${SHA256}" > sha256_${{ env.TARGET_ARCH }}.txt
           echo "::set-output name=sha256_${{ env.TARGET_ARCH }}::$SHA256"
-
+      
+      - name: Upload SHA256 Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: sha256_${{ env.TARGET_ARCH }}
+          path: sha256_${{ env.TARGET_ARCH }}.txt
+        
       - name: Create GitHub Release and Upload Asset
         uses: softprops/action-gh-release@v2
         with:
@@ -106,10 +109,32 @@ jobs:
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
 
+      - name: Download SHA256 x86_64 Artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: sha256_x86_64
+          path: ./artifacts
+
+      - name: Read SHA256 x86_64
+        run: |
+          SHA256_x86_64=$(cat ./artifacts/sha256_x86_64.txt)
+          echo "SHA256_x86_64=${SHA256_x86_64}" >> $GITHUB_ENV
+
+      - name: Download SHA256 arm64 Artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: sha256_arm64
+          path: ./artifacts
+
+      - name: Read SHA256 arm64
+        run: |
+          SHA256_arm64=$(cat ./artifacts/sha256_arm64.txt)
+          echo "SHA256_arm64=${SHA256_arm64}" >> $GITHUB_ENV
+
       - name: Update Homebrew Formula
         working-directory: homebrew-stone-prover
         run: |
-          VERSION="${{ env.VERSION_NO_V }}"
+          VERSION="${{ needs.build.outputs.VERSION }}"
           ROOT_URL="https://github.com/MrRoudyk/stone-packaging/releases/download/v${VERSION}"
           
           SHA256_x86_64="${{ env.sha256_x86_64 }}"
@@ -118,8 +143,8 @@ jobs:
           sed -i '' "/^          bottle do$/,/^          end$/c\\
           bottle do\\
             root_url \"${ROOT_URL}\"\\
-            sha256 cellar: :any_skip_relocation, monterey: \"${SHA256_x86_64}\"\\
-            sha256 cellar: :any_skip_relocation, arm64_monterey: \"${SHA256_arm64}\"\\
+            sha256 cellar: :any_skip_relocation, sonoma: \"${SHA256_x86_64}\"\\
+            sha256 cellar: :any_skip_relocation, arm64_sonoma: \"${SHA256_arm64}\"\\
           end" Formula/stone-prover.rb
 
           sed -i '' "s|version \".*\"|version \"${VERSION}\"|" Formula/stone-prover.rb
