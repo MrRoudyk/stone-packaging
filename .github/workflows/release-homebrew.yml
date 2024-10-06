@@ -68,6 +68,13 @@ jobs:
           name: sha256_${{ matrix.arch }}
           path: sha256_${{ matrix.arch }}.txt
 
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: stone-prover-macos-${{ matrix.arch }}.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   update_formula:
     needs: build
     runs-on: ubuntu-latest
