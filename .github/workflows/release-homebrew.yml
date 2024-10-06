@@ -48,9 +48,7 @@ jobs:
         run: |
           cp /tmp/stone-prover/build/bazelbin/src/starkware/main/cpu/cpu_air_prover ./cpu_air_prover-${{ matrix.arch }}
           cp /tmp/stone-prover/build/bazelbin/src/starkware/main/cpu/cpu_air_verifier ./cpu_air_verifier-${{ matrix.arch }}
-
-      - name: Make binaries executable
-        run: chmod +x cpu_air_prover-${{ matrix.arch }} cpu_air_verifier-${{ matrix.arch }}
+          chmod +x cpu_air_prover-${{ matrix.arch }} cpu_air_verifier-${{ matrix.arch }}
 
       - name: Package binaries
         run: tar -czvf stone-prover-macos-${{ matrix.arch }}.tar.gz cpu_air_prover-${{ matrix.arch }} cpu_air_verifier-${{ matrix.arch }}
@@ -62,21 +60,41 @@ jobs:
           echo "${SHA256}" > sha256_${{ matrix.arch }}.txt
           echo "sha256=${SHA256}" >> $GITHUB_OUTPUT
 
-      - name: Upload SHA256 Artifact
+      - name: Upload artifacts
         uses: actions/upload-artifact@v3
         with:
-          name: sha256_${{ matrix.arch }}
-          path: sha256_${{ matrix.arch }}.txt
+          name: stone-prover-macos-${{ matrix.arch }}
+          path: |
+            stone-prover-macos-${{ matrix.arch }}.tar.gz
+            sha256_${{ matrix.arch }}.txt
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download binaries and SHA256 artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: stone-prover-macos-x86_64
+          path: ./release_assets/x86_64
+
+      - name: Download binaries and SHA256 artifacts for arm64
+        uses: actions/download-artifact@v3
+        with:
+          name: stone-prover-macos-arm64
+          path: ./release_assets/arm64
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: stone-prover-macos-${{ matrix.arch }}.tar.gz
+          files: |
+            ./release_assets/x86_64/stone-prover-macos-x86_64.tar.gz
+            ./release_assets/arm64/stone-prover-macos-arm64.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   update_formula:
-    needs: build
+    needs: release
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Homebrew Formula Repository
@@ -92,22 +110,10 @@ jobs:
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
 
-      - name: Download SHA256 Artifact for x86_64
-        uses: actions/download-artifact@v3
-        with:
-          name: sha256_x86_64
-          path: ./artifacts
-
-      - name: Download SHA256 Artifact for arm64
-        uses: actions/download-artifact@v3
-        with:
-          name: sha256_arm64
-          path: ./artifacts
-
       - name: Read SHA256
         run: |
-          SHA256_x86_64=$(cat ./artifacts/sha256_x86_64.txt)
-          SHA256_arm64=$(cat ./artifacts/sha256_arm64.txt)
+          SHA256_x86_64=$(cat ./release_assets/x86_64/sha256_x86_64.txt)
+          SHA256_arm64=$(cat ./release_assets/arm64/sha256_arm64.txt)
           echo "SHA256_x86_64=${SHA256_x86_64}" >> $GITHUB_ENV
           echo "SHA256_arm64=${SHA256_arm64}" >> $GITHUB_ENV
 
@@ -118,11 +124,11 @@ jobs:
           ROOT_URL="https://github.com/MrRoudyk/stone-packaging/releases/download/v${VERSION}"
 
           sed -i "/^  bottle do$/,/^  end$/c\\
-          bottle do\\
-            root_url \"${ROOT_URL}\"\\
-            sha256 cellar: :any_skip_relocation, sonoma: \"${SHA256_x86_64}\"\\
-            sha256 cellar: :any_skip_relocation, arm64_sonoma: \"${SHA256_arm64}\"\\
-          end" Formula/stone-prover.rb
+            bottle do\\
+              root_url \"${ROOT_URL}\"\\
+              sha256 cellar: :any_skip_relocation, sonoma: \"${SHA256_x86_64}\"\\
+              sha256 cellar: :any_skip_relocation, arm64_sonoma: \"${SHA256_arm64}\"\\
+            end" Formula/stone-prover.rb
 
           sed -i "s|version \".*\"|version \"${VERSION}\"|" Formula/stone-prover.rb
 
