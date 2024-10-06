@@ -7,7 +7,12 @@ on:
 
 jobs:
   build:
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x86_64, arm64]
     runs-on: macos-latest
+    name: Build on ${{ matrix.arch }}
 
     steps:
       - name: Checkout code
@@ -15,11 +20,7 @@ jobs:
 
       - name: Set up environment
         run: |
-          if [[ "$(uname -m)" == "arm64" ]]; then
-            echo "TARGET_ARCH=arm64" >> $GITHUB_ENV
-          else
-            echo "TARGET_ARCH=x86_64" >> $GITHUB_ENV
-          fi
+          echo "TARGET_ARCH=${{ matrix.arch }}" >> $GITHUB_ENV
           echo "TARGET_ARCH: $TARGET_ARCH"
 
       - name: Set Version
@@ -50,13 +51,6 @@ jobs:
         run: |
           chmod +x ./test.sh
           ./test.sh
-
-      - name: List files after build
-        run: |
-          echo "Listing files in current directory:"
-          ls -la ./
-          echo "Listing files in /tmp/stone-prover/build/bazelbin/src/starkware/main/cpu/:"
-          ls -la /tmp/stone-prover/build/bazelbin/src/starkware/main/cpu/
 
       - name: Copy and rename binaries for Homebrew
         run: |
@@ -105,13 +99,22 @@ jobs:
       - name: Update Homebrew Formula
         working-directory: homebrew-stone-prover
         run: |
-          sed -i '' "s|url \".*\"|url \"https://github.com/MrRoudyk/stone-packaging/releases/download/v${{ env.VERSION_NO_V }}/stone-prover-${{ env.VERSION_NO_V }}-macos-${{ env.TARGET_ARCH }}.tar.gz\"|" Formula/stone-prover.rb
-          sed -i '' "s|sha256 \".*\"|sha256 \"${{ steps.compute_sha.outputs.sha256 }}\"|" Formula/stone-prover.rb
-          sed -i '' "s|version \".*\"|version \"${{ env.VERSION_NO_V }}\"|" Formula/stone-prover.rb
+          ARCH_SUFFIX=${{ env.TARGET_ARCH }}
+          VERSION="${{ env.VERSION_NO_V }}"
+          URL="https://github.com/MrRoudyk/stone-packaging/releases/download/v${VERSION}/stone-prover-${VERSION}-macos-${ARCH_SUFFIX}.tar.gz"
+          SHA256="${{ steps.compute_sha.outputs.sha256 }}"
+
+          sed -i '' "/^  bottle do$/,/^  end$/d" Formula/stone-prover.rb
+          echo "  bottle do" >> Formula/stone-prover.rb
+          echo "    root_url \"$URL\"" >> Formula/stone-prover.rb
+          echo "    sha256 cellar: :any_skip_relocation, ${ARCH_SUFFIX}: \"$SHA256\"" >> Formula/stone-prover.rb
+          echo "  end" >> Formula/stone-prover.rb
+
+          sed -i '' "s|version \".*\"|version \"$VERSION\"|" Formula/stone-prover.rb
 
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
 
           git add Formula/stone-prover.rb
-          git commit -m "Update Stone Prover to version ${{ env.VERSION_NO_V }}" || echo "No changes to commit"
+          git commit -m "Update Stone Prover to version $VERSION for $ARCH_SUFFIX" || echo "No changes to commit"
           git push origin main
