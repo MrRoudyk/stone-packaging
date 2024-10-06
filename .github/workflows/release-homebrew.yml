@@ -12,21 +12,19 @@ jobs:
       fail-fast: false
       matrix:
         arch: [x86_64, arm64]
-    name: Build on ${{ matrix.arch }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Set up environment
-        run: |
-          echo "TARGET_ARCH=${{ matrix.arch }}" >> $GITHUB_ENV
-          echo "TARGET_ARCH: $TARGET_ARCH"
+      - name: Set environment variables
+        run: echo "TARGET_ARCH=${{ matrix.arch }}" >> $GITHUB_ENV
 
       - name: Set Version
         id: set_version
         run: |
-          VERSION=${GITHUB_REF##refs/tags/v}
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "VERSION=${VERSION}" >> $GITHUB_ENV
           echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
 
       - name: Set up Python
@@ -39,12 +37,12 @@ jobs:
           brew install gmp bazelisk
           pip3 install cpplint pytest numpy sympy==1.12.1 cairo-lang==0.12.0
 
-      - name: Build
+      - name: Build binaries
         run: |
           chmod +x ./build.sh
           ./build.sh
 
-      - name: Test
+      - name: Test binaries
         run: |
           chmod +x ./test.sh
           ./test.sh
@@ -53,39 +51,26 @@ jobs:
         run: |
           cp /tmp/stone-prover/build/bazelbin/src/starkware/main/cpu/cpu_air_prover ./cpu_air_prover-${{ env.TARGET_ARCH }}
           cp /tmp/stone-prover/build/bazelbin/src/starkware/main/cpu/cpu_air_verifier ./cpu_air_verifier-${{ env.TARGET_ARCH }}
-          echo "Copied and renamed binaries."
 
       - name: Make binaries executable
-        run: |
-          chmod +x cpu_air_prover-${{ env.TARGET_ARCH }}
-          chmod +x cpu_air_verifier-${{ env.TARGET_ARCH }}
-          echo "Set executable permissions."
-
-      - name: Verify binaries
-        run: |
-          echo "Verifying binaries:"
-          ls -l cpu_air_prover-${{ env.TARGET_ARCH }}
-          ls -l cpu_air_verifier-${{ env.TARGET_ARCH }}
+        run: chmod +x cpu_air_prover-${{ env.TARGET_ARCH }} cpu_air_verifier-${{ env.TARGET_ARCH }}
 
       - name: Package binaries
-        run: |
-          tar -czvf stone-prover-macos-${{ env.TARGET_ARCH }}.tar.gz cpu_air_prover-${{ env.TARGET_ARCH }} cpu_air_verifier-${{ env.TARGET_ARCH }}
-          echo "Packaged binaries into stone-prover-macos-${{ env.TARGET_ARCH }}.tar.gz"
+        run: tar -czvf stone-prover-macos-${{ env.TARGET_ARCH }}.tar.gz cpu_air_prover-${{ env.TARGET_ARCH }} cpu_air_verifier-${{ env.TARGET_ARCH }}
 
       - name: Compute SHA256
         id: compute_sha
         run: |
           SHA256=$(shasum -a 256 stone-prover-macos-${{ env.TARGET_ARCH }}.tar.gz | awk '{ print $1 }')
-          echo "${SHA256}" > sha256_${{ env.TARGET_ARCH }}.txt
-          echo "::set-output name=sha256_${{ env.TARGET_ARCH }}::$SHA256"
-      
+          echo "::set-output name=sha256::${SHA256}"
+
       - name: Upload SHA256 Artifact
         uses: actions/upload-artifact@v3
         with:
           name: sha256_${{ env.TARGET_ARCH }}
           path: sha256_${{ env.TARGET_ARCH }}.txt
-        
-      - name: Create GitHub Release and Upload Asset
+
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: stone-prover-macos-${{ env.TARGET_ARCH }}.tar.gz
@@ -95,6 +80,7 @@ jobs:
   update_formula:
     needs: build
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout Homebrew Formula Repository
         uses: actions/checkout@v3
@@ -109,38 +95,26 @@ jobs:
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
 
-      - name: Download SHA256 x86_64 Artifact
+      - name: Download SHA256 Artifacts
         uses: actions/download-artifact@v3
         with:
-          name: sha256_x86_64
+          name: sha256_x86_64, sha256_arm64
           path: ./artifacts
 
-      - name: Read SHA256 x86_64
+      - name: Read SHA256
         run: |
           SHA256_x86_64=$(cat ./artifacts/sha256_x86_64.txt)
-          echo "SHA256_x86_64=${SHA256_x86_64}" >> $GITHUB_ENV
-
-      - name: Download SHA256 arm64 Artifact
-        uses: actions/download-artifact@v3
-        with:
-          name: sha256_arm64
-          path: ./artifacts
-
-      - name: Read SHA256 arm64
-        run: |
           SHA256_arm64=$(cat ./artifacts/sha256_arm64.txt)
+          echo "SHA256_x86_64=${SHA256_x86_64}" >> $GITHUB_ENV
           echo "SHA256_arm64=${SHA256_arm64}" >> $GITHUB_ENV
 
       - name: Update Homebrew Formula
         working-directory: homebrew-stone-prover
         run: |
-          VERSION="${{ needs.build.outputs.VERSION }}"
+          VERSION="${{ needs.build.outputs.set_version.outputs.VERSION }}"
           ROOT_URL="https://github.com/MrRoudyk/stone-packaging/releases/download/v${VERSION}"
-          
-          SHA256_x86_64="${{ env.sha256_x86_64 }}"
-          SHA256_arm64="${{ env.sha256_arm64 }}"
 
-          sed -i '' "/^          bottle do$/,/^          end$/c\\
+          sed -i '' "/^  bottle do$/,/^  end$/c\\
           bottle do\\
             root_url \"${ROOT_URL}\"\\
             sha256 cellar: :any_skip_relocation, sonoma: \"${SHA256_x86_64}\"\\
