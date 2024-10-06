@@ -13,11 +13,11 @@ The goal of this project is to reduce friction and speed up the process of gener
 - [x] Minimal Docker images for x86_64
 - [x] Native packages for Debian/Ubuntu
 - [x] Native packages for Fedora
+- [x] Homebrew packages
 
 Follow-up work:
 
 - Native packages for Alpine
-- Homebrew packages
 - Technical documentation for file formats (inputs, outputs, memory, trace, proof), and test data
 - Documentation hosted on GitHub Pages
 - Integrated proof decomposition (related to https://github.com/zksecurity/stark-evm-adapter)
@@ -125,6 +125,15 @@ install the .rpm package from the latest release:
 
 ```bash
 sudo dnf install https://github.com/dipdup-io/stone-packaging/releases/latest/download/stone-prover-fedora-x86_64.rpm
+```
+
+## Download Homebrew Packages for macOS
+
+Install the `stone-prover` package via Homebrew:
+
+```bash
+brew tap dipdup-io/stone-packaging
+brew install stone-prover
 ```
 
 ### Creating and Verifying a Test Proof Using the Native Packages

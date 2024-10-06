@@ -12,17 +12,9 @@ jobs:
       fail-fast: false
       matrix:
         arch: [x86_64, arm64]
-    outputs:
-      VERSION: ${{ steps.set_version.outputs.VERSION }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
-
-      - name: Set Version
-        id: set_version
-        run: |
-          VERSION=${GITHUB_REF#refs/tags/v}
-          echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -58,14 +50,19 @@ jobs:
         run: |
           SHA256=$(shasum -a 256 stone-prover-macos-${{ matrix.arch }}.tar.gz | awk '{ print $1 }')
           echo "${SHA256}" > sha256_${{ matrix.arch }}.txt
-          echo "sha256=${SHA256}" >> $GITHUB_OUTPUT
 
-      - name: Upload artifacts
+      - name: Upload binaries
         uses: actions/upload-artifact@v3
         with:
           name: stone-prover-macos-${{ matrix.arch }}
           path: |
             stone-prover-macos-${{ matrix.arch }}.tar.gz
+
+      - name: Upload sha256
+        uses: actions/upload-artifact@v3
+        with:
+          name: sha256_${{ matrix.arch }}
+          path: |
             sha256_${{ matrix.arch }}.txt
 
   release:
@@ -110,6 +107,18 @@ jobs:
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
 
+      - name: Download x86_64 SHA256 Artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: sha256_x86_64
+          path: ./release_assets/x86_64
+
+      - name: Download arm64 SHA256 Artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: sha256_arm64
+          path: ./release_assets/arm64
+
       - name: Read SHA256
         run: |
           SHA256_x86_64=$(cat ./release_assets/x86_64/sha256_x86_64.txt)
@@ -120,14 +129,16 @@ jobs:
       - name: Update Homebrew Formula
         working-directory: homebrew-stone-prover
         run: |
-          VERSION="${{ needs.build.outputs.VERSION }}"
+          VERSION=${GITHUB_REF#refs/tags/v}
           ROOT_URL="https://github.com/MrRoudyk/stone-packaging/releases/download/v${VERSION}"
 
-          sed -i "/^  bottle do$/,/^  end$/c\\
-            bottle do\\
-              root_url \"${ROOT_URL}\"\\
-              sha256 cellar: :any_skip_relocation, sonoma: \"${SHA256_x86_64}\"\\
-              sha256 cellar: :any_skip_relocation, arm64_sonoma: \"${SHA256_arm64}\"\\
+          sed -i "/^  if Hardware::CPU.arm?$/,/^  end$/c\\
+            if Hardware::CPU.arm?\\
+              url \"${ROOT_URL}/stone-prover-macos-arm64.tar.gz\"\\
+              sha256 \"${SHA256_arm64}\"\\
+            else\\
+              url \"${ROOT_URL}/stone-prover-macos-x86_64.tar.gz\"\\
+              sha256 \"${SHA256_x86_64}\"\\
             end" Formula/stone-prover.rb
 
           sed -i "s|version \".*\"|version \"${VERSION}\"|" Formula/stone-prover.rb
