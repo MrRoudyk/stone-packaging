@@ -7,11 +7,15 @@ on:
 
 jobs:
   build:
-    runs-on: macos-14
+    runs-on: ${{ matrix.runs-on }}
     strategy:
       fail-fast: false
       matrix:
-        arch: [x86_64, arm64]
+        include:
+          - arch: x86_64
+            runs-on: macos-11
+          - arch: arm64
+            runs-on: macos-14
     steps:
       - name: Checkout code
         uses: actions/checkout@v3

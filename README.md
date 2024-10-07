@@ -136,6 +136,8 @@ brew tap dipdup-io/stone-packaging
 brew install stone-prover
 ```
 
+> **Note:** The Homebrew formula is maintained in the [homebrew-stone-prover](https://github.com/dipdup-io/homebrew-stone-prover) repository. If you encounter any issues or wish to contribute to the formula, please visit the repository.
+
 ### Creating and Verifying a Test Proof Using the Native Packages
 
 Clone the repository:
@@ -166,9 +168,6 @@ Run the verifier to confirm the proof:
 ```bash
 cpu_air_verifier --in_file=fibonacci_proof.json && echo "Successfully verified example proof."
 ```
-
-This project is supported by Nethermind and Starknet Foundation via [OnlyDust platform](https://app.onlydust.com/p/stone-packaging-)
-
 
 ### USNG VOCS TO GENERATE DOCUMENTATION LOCALHOST SITE
 
@@ -225,3 +224,6 @@ To add a new page to the documentation:
 
 1. Create a new markdown file in the `docs/pages/` directory.
 2. Add the new page to the sidebar in `vocs.config.ts`.
+
+This project is supported by Nethermind and Starknet Foundation via [OnlyDust platform](https://app.onlydust.com/p/stone-packaging-)
+```
